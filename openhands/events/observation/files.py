@@ -1,4 +1,13 @@
-"""File-related observation classes for tracking file operations."""
+"""
+OpenHands 文件操作观察模块
+
+定义了文件操作相关的观察类，用于跟踪文件操作的结果，包括：
+- FileReadObservation: 文件读取观察
+- FileWriteObservation: 文件写入观察
+- FileEditObservation: 文件编辑观察
+
+这些观察类记录文件操作的结果和状态。
+"""
 
 from dataclasses import dataclass
 from difflib import SequenceMatcher
@@ -10,36 +19,55 @@ from openhands.events.observation.observation import Observation
 
 @dataclass
 class FileReadObservation(Observation):
-    """This data class represents the content of a file."""
+    """
+    文件读取观察
 
-    path: str
-    observation: str = ObservationType.READ
-    impl_source: FileReadSource = FileReadSource.DEFAULT
+    表示文件读取操作的结果，包含文件内容和路径信息。
+
+    Attributes:
+        path (str): 文件路径
+        observation (str): 观察类型，固定为ObservationType.READ
+        impl_source (FileReadSource): 实现来源，默认为DEFAULT
+        content (str): 继承自Observation，包含文件内容
+    """
+
+    path: str  # 文件路径
+    observation: str = ObservationType.READ  # 观察类型
+    impl_source: FileReadSource = FileReadSource.DEFAULT  # 实现来源
 
     @property
     def message(self) -> str:
-        """Get a human-readable message describing the file read operation."""
+        """获取描述文件读取操作的人类可读消息"""
         return f'I read the file {self.path}.'
 
     def __str__(self) -> str:
-        """Get a string representation of the file read observation."""
+        """获取文件读取观察的字符串表示"""
         return f'[Read from {self.path} is successful.]\n{self.content}'
 
 
 @dataclass
 class FileWriteObservation(Observation):
-    """This data class represents a file write operation."""
+    """
+    文件写入观察
 
-    path: str
-    observation: str = ObservationType.WRITE
+    表示文件写入操作的结果。
+
+    Attributes:
+        path (str): 文件路径
+        observation (str): 观察类型，固定为ObservationType.WRITE
+        content (str): 继承自Observation，包含写入的内容或操作结果
+    """
+
+    path: str  # 文件路径
+    observation: str = ObservationType.WRITE  # 观察类型
 
     @property
     def message(self) -> str:
-        """Get a human-readable message describing the file write operation."""
+        """获取描述文件写入操作的人类可读消息"""
         return f'I wrote to the file {self.path}.'
 
     def __str__(self) -> str:
-        """Get a string representation of the file write observation."""
+        """获取文件写入观察的字符串表示"""
         return f'[Write to {self.path} is successful.]\n{self.content}'
 
 

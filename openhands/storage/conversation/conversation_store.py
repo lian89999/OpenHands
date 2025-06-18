@@ -1,3 +1,10 @@
+"""
+OpenHands 对话存储抽象基类
+
+定义了对话元数据存储的标准接口，支持自定义存储实现。
+应用程序可以通过继承此类来实现自定义的对话存储逻辑。
+"""
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -12,17 +19,24 @@ from openhands.utils.async_utils import wait_all
 
 
 class ConversationStore(ABC):
-    """Abstract base class for conversation metadata storage.
+    """
+    对话存储抽象基类
 
-    This is an extension point in OpenHands that allows applications to customize how
-    conversation metadata is stored. Applications can substitute their own implementation by:
-    1. Creating a class that inherits from ConversationStore
-    2. Implementing all required methods
-    3. Setting server_config.conversation_store_class to the fully qualified name of the class
+    这是OpenHands中的一个扩展点，允许应用程序自定义对话元数据的存储方式。
+    应用程序可以通过以下方式替换自己的实现：
+    1. 创建一个继承自ConversationStore的类
+    2. 实现所有必需的方法
+    3. 将server_config.conversation_store_class设置为该类的完全限定名
 
-    The class is instantiated via get_impl() in openhands.server.shared.py.
+    该类通过openhands.server.shared.py中的get_impl()进行实例化。
 
-    The implementation may or may not support multiple users depending on the environment.
+    根据环境的不同，实现可能支持也可能不支持多用户。
+
+    主要功能：
+    - 对话元数据的CRUD操作
+    - 支持分页查询和过滤
+    - 用户级别的数据隔离
+    - 异步操作支持
     """
 
     @abstractmethod

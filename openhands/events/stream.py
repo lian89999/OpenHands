@@ -1,3 +1,14 @@
+"""
+OpenHands 事件流模块
+
+这个模块实现了事件流系统，负责事件的发布、订阅和分发。
+主要功能包括：
+- 事件流管理和订阅机制
+- 多线程事件处理
+- 事件持久化和序列化
+- 会话管理
+"""
+
 import asyncio
 import queue
 import threading
@@ -21,19 +32,32 @@ from openhands.utils.shutdown_listener import should_continue
 
 
 class EventStreamSubscriber(str, Enum):
-    AGENT_CONTROLLER = 'agent_controller'
-    SECURITY_ANALYZER = 'security_analyzer'
-    RESOLVER = 'openhands_resolver'
-    SERVER = 'server'
-    RUNTIME = 'runtime'
-    MEMORY = 'memory'
-    MAIN = 'main'
-    TEST = 'test'
+    """事件流订阅者枚举，定义了可以订阅事件流的组件类型"""
+
+    AGENT_CONTROLLER = 'agent_controller'  # 代理控制器
+    SECURITY_ANALYZER = 'security_analyzer'  # 安全分析器
+    RESOLVER = 'openhands_resolver'  # OpenHands 解析器
+    SERVER = 'server'  # 服务器
+    RUNTIME = 'runtime'  # 运行时环境
+    MEMORY = 'memory'  # 内存管理器
+    MAIN = 'main'  # 主程序
+    TEST = 'test'  # 测试组件
 
 
 async def session_exists(
     sid: str, file_store: FileStore, user_id: str | None = None
 ) -> bool:
+    """
+    检查会话是否存在
+
+    Args:
+        sid (str): 会话ID
+        file_store (FileStore): 文件存储实例
+        user_id (str | None): 用户ID，可选
+
+    Returns:
+        bool: 如果会话存在返回True，否则返回False
+    """
     try:
         await call_sync_from_async(file_store.list, get_conversation_dir(sid, user_id))
         return True
@@ -42,34 +66,67 @@ async def session_exists(
 
 
 class EventStream(EventStore):
-    secrets: dict[str, str]
-    # For each subscriber ID, there is a map of callback functions - useful
-    # when there are multiple listeners
+    """
+    事件流类，继承自EventStore，负责事件的实时分发和订阅管理
+
+    这个类实现了发布-订阅模式，允许多个组件订阅事件流并接收事件通知。
+    主要功能包括：
+    - 事件订阅和取消订阅
+    - 多线程事件分发
+    - 事件队列管理
+    - 线程池和事件循环管理
+    """
+
+    secrets: dict[str, str]  # 存储敏感信息的字典
+
+    # 订阅者映射：每个订阅者ID对应一个回调函数映射
+    # 这样设计便于支持多个监听器
     _subscribers: dict[str, dict[str, Callable]]
-    _lock: threading.Lock
-    _queue: queue.Queue[Event]
-    _queue_thread: threading.Thread
-    _queue_loop: asyncio.AbstractEventLoop | None
-    _thread_pools: dict[str, dict[str, ThreadPoolExecutor]]
-    _thread_loops: dict[str, dict[str, asyncio.AbstractEventLoop]]
-    _write_page_cache: list[dict]
+
+    _lock: threading.Lock  # 线程锁，保证线程安全
+    _queue: queue.Queue[Event]  # 事件队列
+    _queue_thread: threading.Thread  # 队列处理线程
+    _queue_loop: asyncio.AbstractEventLoop | None  # 队列事件循环
+    _thread_pools: dict[str, dict[str, ThreadPoolExecutor]]  # 线程池映射
+    _thread_loops: dict[str, dict[str, asyncio.AbstractEventLoop]]  # 事件循环映射
+    _write_page_cache: list[dict]  # 写入页面缓存
 
     def __init__(self, sid: str, file_store: FileStore, user_id: str | None = None):
+        """
+        初始化事件流
+
+        Args:
+            sid (str): 会话ID
+            file_store (FileStore): 文件存储实例
+            user_id (str | None): 用户ID，可选
+        """
         super().__init__(sid, file_store, user_id)
-        self._stop_flag = threading.Event()
-        self._queue: queue.Queue[Event] = queue.Queue()
-        self._thread_pools = {}
-        self._thread_loops = {}
-        self._queue_loop = None
+        self._stop_flag = threading.Event()  # 停止标志
+        self._queue: queue.Queue[Event] = queue.Queue()  # 初始化事件队列
+        self._thread_pools = {}  # 初始化线程池字典
+        self._thread_loops = {}  # 初始化事件循环字典
+        self._queue_loop = None  # 队列事件循环
+
+        # 创建并启动队列处理线程
         self._queue_thread = threading.Thread(target=self._run_queue_loop)
-        self._queue_thread.daemon = True
+        self._queue_thread.daemon = True  # 设置为守护线程
         self._queue_thread.start()
-        self._subscribers = {}
-        self._lock = threading.Lock()
-        self.secrets = {}
-        self._write_page_cache = []
+
+        self._subscribers = {}  # 初始化订阅者字典
+        self._lock = threading.Lock()  # 初始化线程锁
+        self.secrets = {}  # 初始化敏感信息字典
+        self._write_page_cache = []  # 初始化写入缓存
 
     def _init_thread_loop(self, subscriber_id: str, callback_id: str) -> None:
+        """
+        初始化线程事件循环
+
+        为每个订阅者的回调函数创建独立的事件循环
+
+        Args:
+            subscriber_id (str): 订阅者ID
+            callback_id (str): 回调函数ID
+        """
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         if subscriber_id not in self._thread_loops:
@@ -77,27 +134,46 @@ class EventStream(EventStore):
         self._thread_loops[subscriber_id][callback_id] = loop
 
     def close(self) -> None:
-        self._stop_flag.set()
-        if self._queue_thread.is_alive():
-            self._queue_thread.join()
+        """
+        关闭事件流，清理所有资源
 
+        这个方法会：
+        1. 设置停止标志
+        2. 等待队列处理线程结束
+        3. 清理所有订阅者
+        4. 清空事件队列
+        """
+        self._stop_flag.set()  # 设置停止标志
+        if self._queue_thread.is_alive():
+            self._queue_thread.join()  # 等待队列线程结束
+
+        # 清理所有订阅者
         subscriber_ids = list(self._subscribers.keys())
         for subscriber_id in subscriber_ids:
             callback_ids = list(self._subscribers[subscriber_id].keys())
             for callback_id in callback_ids:
                 self._clean_up_subscriber(subscriber_id, callback_id)
 
-        # Clear queue
+        # 清空队列
         while not self._queue.empty():
             self._queue.get()
 
     def _clean_up_subscriber(self, subscriber_id: str, callback_id: str) -> None:
+        """
+        清理指定的订阅者
+
+        Args:
+            subscriber_id (str): 订阅者ID
+            callback_id (str): 回调函数ID
+        """
         if subscriber_id not in self._subscribers:
             logger.warning(f'Subscriber not found during cleanup: {subscriber_id}')
             return
         if callback_id not in self._subscribers[subscriber_id]:
             logger.warning(f'Callback not found during cleanup: {callback_id}')
             return
+
+        # 清理事件循环
         if (
             subscriber_id in self._thread_loops
             and callback_id in self._thread_loops[subscriber_id]
@@ -107,6 +183,7 @@ class EventStream(EventStore):
             pending = [
                 task for task in asyncio.all_tasks(loop) if task is not current_task
             ]
+            # 取消所有待处理的任务
             for task in pending:
                 task.cancel()
             try:
@@ -118,14 +195,16 @@ class EventStream(EventStore):
                 )
             del self._thread_loops[subscriber_id][callback_id]
 
+        # 清理线程池
         if (
             subscriber_id in self._thread_pools
             and callback_id in self._thread_pools[subscriber_id]
         ):
             pool = self._thread_pools[subscriber_id][callback_id]
-            pool.shutdown()
+            pool.shutdown()  # 关闭线程池
             del self._thread_pools[subscriber_id][callback_id]
 
+        # 删除订阅者记录
         del self._subscribers[subscriber_id][callback_id]
 
     def subscribe(
@@ -134,17 +213,33 @@ class EventStream(EventStore):
         callback: Callable[[Event], None],
         callback_id: str,
     ) -> None:
+        """
+        订阅事件流
+
+        Args:
+            subscriber_id (EventStreamSubscriber): 订阅者ID
+            callback (Callable[[Event], None]): 事件回调函数
+            callback_id (str): 回调函数的唯一标识符
+
+        Raises:
+            ValueError: 如果回调ID已存在
+        """
+        # 创建线程池初始化器
         initializer = partial(self._init_thread_loop, subscriber_id, callback_id)
         pool = ThreadPoolExecutor(max_workers=1, initializer=initializer)
+
+        # 初始化订阅者映射
         if subscriber_id not in self._subscribers:
             self._subscribers[subscriber_id] = {}
             self._thread_pools[subscriber_id] = {}
 
+        # 检查回调ID是否已存在
         if callback_id in self._subscribers[subscriber_id]:
             raise ValueError(
                 f'Callback ID on subscriber {subscriber_id} already exists: {callback_id}'
             )
 
+        # 注册订阅者
         self._subscribers[subscriber_id][callback_id] = callback
         self._thread_pools[subscriber_id][callback_id] = pool
 

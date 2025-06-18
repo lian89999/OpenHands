@@ -1,3 +1,14 @@
+"""
+OpenHands 命令执行观察模块
+
+定义了命令执行结果的观察类，包括：
+- CmdOutputMetadata: 命令输出元数据，包含退出码、进程ID等信息
+- CmdOutputObservation: 命令输出观察，包含命令执行的完整结果
+- IPythonRunCellObservation: IPython代码执行观察
+
+这些观察类用于捕获和处理命令执行的结果。
+"""
+
 import json
 import re
 import traceback
@@ -10,6 +21,7 @@ from openhands.core.logger import openhands_logger as logger
 from openhands.core.schema import ObservationType
 from openhands.events.observation.observation import Observation
 
+# PS1提示符的开始和结束标记，用于捕获命令元数据
 CMD_OUTPUT_PS1_BEGIN = '\n###PS1JSON###\n'
 CMD_OUTPUT_PS1_END = '\n###PS1END###'
 CMD_OUTPUT_METADATA_PS1_REGEX = re.compile(
@@ -19,16 +31,30 @@ CMD_OUTPUT_METADATA_PS1_REGEX = re.compile(
 
 
 class CmdOutputMetadata(BaseModel):
-    """Additional metadata captured from PS1"""
+    """
+    命令输出元数据
 
-    exit_code: int = -1
-    pid: int = -1
-    username: str | None = None
-    hostname: str | None = None
-    working_dir: str | None = None
-    py_interpreter_path: str | None = None
-    prefix: str = ''  # Prefix to add to command output
-    suffix: str = ''  # Suffix to add to command output
+    从PS1提示符中捕获的额外元数据，包含命令执行的环境信息。
+
+    Attributes:
+        exit_code (int): 命令退出码，-1表示未知
+        pid (int): 进程ID，-1表示未知
+        username (str | None): 用户名
+        hostname (str | None): 主机名
+        working_dir (str | None): 工作目录
+        py_interpreter_path (str | None): Python解释器路径
+        prefix (str): 添加到命令输出前的前缀
+        suffix (str): 添加到命令输出后的后缀
+    """
+
+    exit_code: int = -1  # 命令退出码
+    pid: int = -1  # 进程ID
+    username: str | None = None  # 用户名
+    hostname: str | None = None  # 主机名
+    working_dir: str | None = None  # 工作目录
+    py_interpreter_path: str | None = None  # Python解释器路径
+    prefix: str = ''  # 输出前缀
+    suffix: str = ''  # 输出后缀
 
     @classmethod
     def to_ps1_prompt(cls) -> str:

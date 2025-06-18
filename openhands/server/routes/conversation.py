@@ -1,3 +1,15 @@
+"""
+OpenHands 对话API路由
+
+提供对话相关的REST API端点，包括：
+- 运行时配置获取
+- 事件流管理
+- 内存操作
+- 微代理管理
+
+这些API用于前端与特定对话会话的交互。
+"""
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -13,6 +25,7 @@ from openhands.server.session.conversation import ServerConversation
 from openhands.server.shared import conversation_manager
 from openhands.server.utils import get_conversation
 
+# 创建对话API路由器，所有端点都需要conversation_id参数
 app = APIRouter(
     prefix='/api/conversations/{conversation_id}', dependencies=get_dependencies()
 )

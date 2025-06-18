@@ -1,3 +1,13 @@
+"""
+OpenHands 事件存储模块
+
+这个模块实现了事件的持久化存储，包括：
+- EventStore: 事件存储的主要实现
+- _CachePage: 事件缓存页，用于优化读取性能
+
+事件存储负责将事件持久化到文件系统，并提供高效的读取和写入接口。
+"""
+
 import json
 from dataclasses import dataclass
 from typing import Iterable
@@ -18,11 +28,31 @@ from openhands.utils.shutdown_listener import should_continue
 
 @dataclass(frozen=True)
 class _CachePage:
-    events: list[dict] | None
-    start: int
-    end: int
+    """
+    事件缓存页，用于优化事件读取性能
+
+    将事件按页缓存，避免频繁的文件I/O操作。
+
+    Attributes:
+        events (list[dict] | None): 缓存的事件列表（字典格式）
+        start (int): 页面起始索引
+        end (int): 页面结束索引
+    """
+
+    events: list[dict] | None  # 缓存的事件列表
+    start: int  # 起始索引
+    end: int  # 结束索引
 
     def covers(self, global_index: int) -> bool:
+        """
+        检查指定的全局索引是否在此缓存页的范围内
+
+        Args:
+            global_index (int): 要检查的全局索引
+
+        Returns:
+            bool: 如果索引在范围内返回True，否则返回False
+        """
         if global_index < self.start:
             return False
         if global_index >= self.end:
@@ -30,24 +60,41 @@ class _CachePage:
         return True
 
     def get_event(self, global_index: int) -> Event | None:
-        # If there was not actually a cached page, return None
+        """
+        从缓存页中获取指定索引的事件
+
+        Args:
+            global_index (int): 事件的全局索引
+
+        Returns:
+            Event | None: 如果找到事件则返回Event对象，否则返回None
+        """
+        # 如果没有实际的缓存页，返回None
         if not self.events:
             return None
         local_index = global_index - self.start
         return event_from_dict(self.events[local_index])
 
 
+# 虚拟缓存页，用于表示无效的缓存状态
 _DUMMY_PAGE = _CachePage(None, 1, -1)
 
 
 @dataclass
 class EventStore(EventStoreABC):
     """
-    A stored list of events backing a conversation
+    事件存储类，实现事件的持久化存储
+
+    这个类负责将对话中的事件存储到文件系统中，并提供高效的
+    读取和写入接口。支持事件过滤、缓存和分页加载。
+
+    Attributes:
+        sid (str): 会话ID
+        file_store (FileStore): 文件存储实例
     """
 
-    sid: str
-    file_store: FileStore
+    sid: str  # 会话ID
+    file_store: FileStore  # 文件存储实例
     user_id: str | None
     cur_id: int = -1  # We fix this in post init if it is not specified
     cache_size: int = 25
