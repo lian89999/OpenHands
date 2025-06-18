@@ -1,3 +1,16 @@
+"""
+OpenHands 服务器共享组件
+
+这个模块初始化和配置服务器的共享组件，包括：
+- 配置加载和验证
+- 存储系统初始化
+- 对话管理器创建
+- Socket.IO服务器设置
+- 监控系统配置
+
+这些组件在整个服务器应用程序中共享使用。
+"""
+
 import os
 
 import socketio
@@ -18,6 +31,7 @@ from openhands.storage.secrets.secrets_store import SecretsStore
 from openhands.storage.settings.settings_store import SettingsStore
 from openhands.utils.import_utils import get_impl
 
+# 加载环境变量
 load_dotenv()
 
 config: OpenHandsConfig = load_openhands_config()

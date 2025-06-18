@@ -1,3 +1,15 @@
+"""
+OpenHands 会话管理模块
+
+这个模块定义了Session类，负责管理用户会话的完整生命周期，包括：
+- WebSocket连接管理
+- 代理会话的创建和控制
+- 事件流的处理和转发
+- 用户状态的维护
+
+Session是服务器端会话管理的核心组件，连接了前端用户和后端代理系统。
+"""
+
 import asyncio
 import time
 from copy import deepcopy
@@ -33,20 +45,45 @@ from openhands.server.session.conversation_init_data import ConversationInitData
 from openhands.storage.data_models.settings import Settings
 from openhands.storage.files import FileStore
 
+# WebSocket房间键模板，用于Socket.IO房间管理
 ROOM_KEY = 'room:{sid}'
 
 
 class Session:
-    sid: str
-    sio: socketio.AsyncServer | None
-    last_active_ts: int = 0
-    is_alive: bool = True
-    agent_session: AgentSession
-    loop: asyncio.AbstractEventLoop
-    config: OpenHandsConfig
-    file_store: FileStore
-    user_id: str | None
-    logger: LoggerAdapter
+    """
+    用户会话管理类
+
+    Session类是OpenHands服务器端会话管理的核心组件，负责：
+    - 管理单个用户的WebSocket连接
+    - 协调前端UI和后端代理之间的通信
+    - 处理事件流的订阅和转发
+    - 维护会话状态和生命周期
+
+    每个Session实例对应一个用户会话，包含一个AgentSession来管理代理交互。
+
+    Attributes:
+        sid (str): 会话唯一标识符
+        sio (socketio.AsyncServer | None): Socket.IO服务器实例
+        last_active_ts (int): 最后活跃时间戳
+        is_alive (bool): 会话是否存活
+        agent_session (AgentSession): 代理会话实例
+        loop (asyncio.AbstractEventLoop): 异步事件循环
+        config (OpenHandsConfig): 配置对象副本
+        file_store (FileStore): 文件存储实例
+        user_id (str | None): 用户ID
+        logger (LoggerAdapter): 日志记录器
+    """
+
+    sid: str  # 会话ID
+    sio: socketio.AsyncServer | None  # Socket.IO服务器
+    last_active_ts: int = 0  # 最后活跃时间
+    is_alive: bool = True  # 会话存活状态
+    agent_session: AgentSession  # 代理会话
+    loop: asyncio.AbstractEventLoop  # 事件循环
+    config: OpenHandsConfig  # 配置对象
+    file_store: FileStore  # 文件存储
+    user_id: str | None  # 用户ID
+    logger: LoggerAdapter  # 日志记录器
 
     def __init__(
         self,
@@ -56,21 +93,38 @@ class Session:
         sio: socketio.AsyncServer | None,
         user_id: str | None = None,
     ):
+        """
+        初始化会话
+
+        Args:
+            sid (str): 会话唯一标识符
+            config (OpenHandsConfig): OpenHands配置对象
+            file_store (FileStore): 文件存储实例
+            sio (socketio.AsyncServer | None): Socket.IO服务器实例
+            user_id (str | None): 用户ID，可选
+        """
         self.sid = sid
         self.sio = sio
         self.last_active_ts = int(time.time())
         self.file_store = file_store
+
+        # 创建带会话ID的日志记录器
         self.logger = OpenHandsLoggerAdapter(extra={'session_id': sid})
+
+        # 创建代理会话，设置状态回调
         self.agent_session = AgentSession(
             sid,
             file_store,
             status_callback=self.queue_status_message,
             user_id=user_id,
         )
+
+        # 订阅代理会话的事件流
         self.agent_session.event_stream.subscribe(
             EventStreamSubscriber.SERVER, self.on_event, self.sid
         )
-        # Copying this means that when we update variables they are not applied to the shared global configuration!
+
+        # 深拷贝配置，确保会话级别的配置修改不影响全局配置
         self.config = deepcopy(config)
         self.loop = asyncio.get_event_loop()
         self.user_id = user_id
